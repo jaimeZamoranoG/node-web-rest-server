@@ -1,23 +1,23 @@
 import { Request, Response } from "express"
-
-const todos = [
-    {id:1,text:'Buy Milk', createdAt:new Date()},
-    {id:2,text:'Buy Cheese', createdAt:new Date()},
-    {id:3,text:'Buy Donuts', createdAt:new Date()}
-];
+import { CreateTodoDto, UpdateTodoDto } from "../../domain/dto";
+import { TodoRepository } from "../../domain";
 
 export class TodoController {
 
     //*Inyeccion de dependencias
-    constructor(){
+    constructor(
+        private readonly todoRepository:TodoRepository
+    ){}
 
+    public getTodos = async(req:Request,res:Response)=>{
+        const todos = await this.todoRepository.getAll();
+        res.json({
+            ok:true,
+            todos,
+        });
     }
 
-    public getTodos = (req:Request,res:Response)=>{
-        res.json(todos);
-    }
-
-    public getTodoById = (req:Request,res:Response)=>{
+    public getTodoById = async(req:Request,res:Response)=>{
         const id = +req.params.id;
         if (isNaN(id)){
             res.status(400).json({
@@ -25,35 +25,39 @@ export class TodoController {
             });
             return;
         }
-        const todo = todos.find(todo=>todo.id===id);
-        (todo)
-        ? res.json(todo)
-        : res.status(404).json({
-            error:`Todo ${id} not found`
-        });
+        try {
+            const todo = await this.todoRepository.findById(id);
+            res.json({
+                ok:true,
+                todo
+            });
+        } catch (error) {
+            res.status(404).json({
+                ok:false,
+                error
+            });
+        }
+        
     }
 
-    public createTodo = (req:Request,res:Response)=>{
-        const {text} = req.body();
-        if (!text){
+    public createTodo = async(req:Request,res:Response)=>{
+        const [error,createTodoDto] = CreateTodoDto.create(req.body);
+        if (error){
             res.status(400).json({
-                error:'Text is required'
+                ok:false,
+                error
             });
             return;
         }
-        const newTodo = {
-            id: todos.length + 1,
-            text,
-            createdAt: new Date(),
-        }
-        todos.push(newTodo);
+
+        const todo = await this.todoRepository.create(createTodoDto!);
         res.json({
             ok:true,
-            todo:newTodo
+            todo
         })
     };
 
-    public updateTodo = (req:Request,res:Response)=>{
+    public updateTodo = async(req:Request,res:Response)=>{
         const id = +req.params.id;
         if (isNaN(id)){
             res.status(400).json({
@@ -61,30 +65,24 @@ export class TodoController {
             });
             return;
         }
-        const {text} = req.body;
-        if (!text){
-            res.status(400).json({
-                error:'Text is required'
-            });
-            return;
-        }
-        const todo = todos.find(todo=>todo.id===id);
-        if(todo){
-            todo.text=text;
+        const [clientError,updateTodoDto] = UpdateTodoDto.create({...req.body,id});
+        try {
+            const todo = await this.todoRepository.update(updateTodoDto!);
             res.json({
                 ok:true,
                 todo
-            })
+            });
             return;
+        } catch (error) {
+            res.status(400).json({
+                ok:false,
+                error: clientError ? clientError : error
+            });
+            return; 
         }
-        res.status(404).json({
-            error:`Todo ${id} not found`
-        });
-        return; 
-        
     };
 
-    public deleteTodo = (req:Request,res:Response)=>{
+    public deleteTodo = async(req:Request,res:Response)=>{
         const id = +req.params.id;
         if (isNaN(id)){
             res.status(400).json({
@@ -92,21 +90,20 @@ export class TodoController {
             });
             return;
         }
-        const todo = todos.find(todo=>todo.id===id);
-        if(todo){
-            todos.splice(todos.indexOf(todo),1);
+        
+        try {
+            const todo = await this.todoRepository.delete(id);
             res.json({
                 ok:true,
                 todo
             })
             return;
+        } catch (error) {
+            res.status(404).json({
+                error:`Todo ${id} not found`
+            });
+            return; 
         }
-        res.status(404).json({
-            error:`Todo ${id} not found`
-        });
-        return; 
-
     }
 
 }
-
